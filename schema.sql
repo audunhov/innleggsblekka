@@ -1,23 +1,47 @@
 CREATE TABLE users (
-Id SERIAL PRIMARY KEY,
+Id INTEGER PRIMARY KEY,
 	Name TEXT NOT NULL,
 	Email TEXT NOT NULL UNIQUE,
-	CreatedAt TIMESTAMP DEFAULT NOW(),
+	CreatedAt TIMESTAMP DEFAULT current_timestamp,
 	IsAdmin BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE posts (
-Id SERIAL PRIMARY KEY,
+Id INTEGER PRIMARY KEY,
 	Title TEXT NOT NULL,
 	Body TEXT NOT NULL,
-	CreatorId INT NOT NULL REFERENCES users(Id),
-	CreatedAt TIMESTAMP DEFAULT NOW(),
-	ApprovedBy INT REFERENCES users(Id)
+	CreatorId INTEGER NOT NULL REFERENCES users(Id),
+	CreatedAt TIMESTAMP DEFAULT current_timestamp,
+	ApprovedBy INTEGER REFERENCES users(Id),
+	ApprovedAt TIMESTAMP
 );
 
 CREATE TABLE tags (
-	Id SERIAL PRIMARY KEY,
-PostId INT NOT NULL REFERENCES posts(Id),
-	CreatedAt TIMESTAMP DEFAULT NOW(),
-	Tag TEXT NOT NULL
+	Id INTEGER PRIMARY KEY,
+	CreatedAt TIMESTAMP DEFAULT current_timestamp,
+	Tag TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE post_tags (
+	TagId INTEGER NOT NULL REFERENCES tags(Id),
+PostId INTEGER NOT NULL REFERENCES posts(Id),
+	CreatedAt TIMESTAMP DEFAULT current_timestamp,
+	PRIMARY KEY(TagId, PostId)
+	);
+
+
+CREATE TABLE log_entries (
+	Id INTEGER PRIMARY KEY,
+	TableName TEXT NOT NULL,
+	User INTEGER NOT NULL REFERENCES users(Id),
+	OldValue BLOB,
+	NewValue BLOB,
+	CreatedAt TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE favourite_posts (
+	PostId INTEGER NOT NULL REFERENCES posts(Id),
+	UserId INTEGER NOT NULL REFERENCES users(Id),
+	CreatedAt TIMESTAMP DEFAULT current_timestamp,
+	PRIMARY KEY(PostId, UserId)
 );

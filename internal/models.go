@@ -5,29 +5,50 @@
 package internal
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
+type FavouritePost struct {
+	Postid    int64
+	Userid    int64
+	Createdat sql.NullTime
+}
+
+type LogEntry struct {
+	ID        int64
+	Tablename string
+	User      int64
+	Oldvalue  []byte
+	Newvalue  []byte
+	Createdat sql.NullTime
+}
+
 type Post struct {
-	ID         int32
+	ID         int64
 	Title      string
 	Body       string
-	Creatorid  int32
-	Createdat  pgtype.Timestamp
-	Approvedby pgtype.Int4
+	Creatorid  int64
+	Createdat  sql.NullTime
+	Approvedby sql.NullInt64
+	Approvedat sql.NullTime
+}
+
+type PostTag struct {
+	Tagid     int64
+	Postid    int64
+	Createdat sql.NullTime
 }
 
 type Tag struct {
-	ID        int32
-	Postid    int32
-	Createdat pgtype.Timestamp
+	ID        int64
+	Createdat sql.NullTime
 	Tag       string
 }
 
 type User struct {
-	ID        int32
+	ID        int64
 	Name      string
 	Email     string
-	Createdat pgtype.Timestamp
+	Createdat sql.NullTime
 	Isadmin   bool
 }

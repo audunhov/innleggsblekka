@@ -1,0 +1,37 @@
+package views
+
+templ Page(title string) {
+	<html lang="en" class="bg-gray-100 min-h-screen">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title }</title>
+			<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+			<script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+			<script src="https://cdn.tailwindcss.com"></script>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
+
+templ HomePage() {
+	@Page("Innleggsblekka") {
+		@Header()
+	}
+}
+
+templ LoginPage() {
+	<form hx-post="/v1/login/">
+		<label for="email">E-post</label>
+		<input id="email" email="email" type="email" required/>
+		<label for="password">Passord</label>
+		<input id="password" name="password" type="password" required/>
+		<button type="submit">Logg in</button>
+	</form>
+}
+
+templ Header() {
+	<header></header>
+}

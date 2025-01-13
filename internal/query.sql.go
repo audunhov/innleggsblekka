@@ -7,23 +7,108 @@ package internal
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
+const addFavourite = `-- name: AddFavourite :one
+INSERT INTO favourite_posts (PostId, UserId) VALUES (?, ?) RETURNING postid, userid, createdat
+`
+
+type AddFavouriteParams struct {
+	Postid int64
+	Userid int64
+}
+
+func (q *Queries) AddFavourite(ctx context.Context, arg AddFavouriteParams) (FavouritePost, error) {
+	row := q.db.QueryRowContext(ctx, addFavourite, arg.Postid, arg.Userid)
+	var i FavouritePost
+	err := row.Scan(&i.Postid, &i.Userid, &i.Createdat)
+	return i, err
+}
+
+const addTagToPost = `-- name: AddTagToPost :one
+INSERT INTO post_tags (TagId, PostId) VALUES (?, ?) RETURNING tagid, postid, createdat
+`
+
+type AddTagToPostParams struct {
+	Tagid  int64
+	Postid int64
+}
+
+func (q *Queries) AddTagToPost(ctx context.Context, arg AddTagToPostParams) (PostTag, error) {
+	row := q.db.QueryRowContext(ctx, addTagToPost, arg.Tagid, arg.Postid)
+	var i PostTag
+	err := row.Scan(&i.Tagid, &i.Postid, &i.Createdat)
+	return i, err
+}
+
+const approvePost = `-- name: ApprovePost :one
+UPDATE posts SET ApprovedBy=?, ApprovedAt=current_timestamp WHERE Id = ? RETURNING id, title, body, creatorid, createdat, approvedby, approvedat
+`
+
+type ApprovePostParams struct {
+	Approvedby sql.NullInt64
+	ID         int64
+}
+
+func (q *Queries) ApprovePost(ctx context.Context, arg ApprovePostParams) (Post, error) {
+	row := q.db.QueryRowContext(ctx, approvePost, arg.Approvedby, arg.ID)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Body,
+		&i.Creatorid,
+		&i.Createdat,
+		&i.Approvedby,
+		&i.Approvedat,
+	)
+	return i, err
+}
+
+const createLogEntry = `-- name: CreateLogEntry :one
+INSERT INTO log_entries (TableName, User, OldValue, NewValue) VALUES (?, ?, ?, ?) RETURNING id, tablename, user, oldvalue, newvalue, createdat
+`
+
+type CreateLogEntryParams struct {
+	Tablename string
+	User      int64
+	Oldvalue  []byte
+	Newvalue  []byte
+}
+
+func (q *Queries) CreateLogEntry(ctx context.Context, arg CreateLogEntryParams) (LogEntry, error) {
+	row := q.db.QueryRowContext(ctx, createLogEntry,
+		arg.Tablename,
+		arg.User,
+		arg.Oldvalue,
+		arg.Newvalue,
+	)
+	var i LogEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Tablename,
+		&i.User,
+		&i.Oldvalue,
+		&i.Newvalue,
+		&i.Createdat,
+	)
+	return i, err
+}
+
 const createPost = `-- name: CreatePost :one
-INSERT INTO posts (Title, Body, CreatorId, ApprovedBy) VALUES ($1, $2, $3, $4) RETURNING id, title, body, creatorid, createdat, approvedby
+INSERT INTO posts (Title, Body, CreatorId, ApprovedBy) VALUES (?, ?, ?, ?) RETURNING id, title, body, creatorid, createdat, approvedby, approvedat
 `
 
 type CreatePostParams struct {
 	Title      string
 	Body       string
-	Creatorid  int32
-	Approvedby pgtype.Int4
+	Creatorid  int64
+	Approvedby sql.NullInt64
 }
 
 func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, error) {
-	row := q.db.QueryRow(ctx, createPost,
+	row := q.db.QueryRowContext(ctx, createPost,
 		arg.Title,
 		arg.Body,
 		arg.Creatorid,
@@ -37,64 +122,82 @@ func (q *Queries) CreatePost(ctx context.Context, arg CreatePostParams) (Post, e
 		&i.Creatorid,
 		&i.Createdat,
 		&i.Approvedby,
+		&i.Approvedat,
 	)
 	return i, err
 }
 
 const createTag = `-- name: CreateTag :one
-INSERT INTO tags (PostId, Tag) VALUES ($1, $2) RETURNING id, postid, createdat, tag
+INSERT INTO tags (Tag) VALUES (?) RETURNING id, createdat, tag
 `
 
-type CreateTagParams struct {
-	Postid int32
-	Tag    string
-}
-
-func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error) {
-	row := q.db.QueryRow(ctx, createTag, arg.Postid, arg.Tag)
+func (q *Queries) CreateTag(ctx context.Context, tag string) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, createTag, tag)
 	var i Tag
-	err := row.Scan(
-		&i.ID,
-		&i.Postid,
-		&i.Createdat,
-		&i.Tag,
-	)
+	err := row.Scan(&i.ID, &i.Createdat, &i.Tag)
 	return i, err
 }
 
-const deletePost = `-- name: DeletePost :exec
-DELETE FROM posts WHERE Id = $1
+const deleteLogEntry = `-- name: DeleteLogEntry :exec
+DELETE FROM log_entries WHERE Id = ?
 `
 
-func (q *Queries) DeletePost(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deletePost, id)
+func (q *Queries) DeleteLogEntry(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteLogEntry, id)
+	return err
+}
+
+const deletePost = `-- name: DeletePost :exec
+DELETE FROM posts WHERE Id = ?
+`
+
+func (q *Queries) DeletePost(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deletePost, id)
 	return err
 }
 
 const deleteTag = `-- name: DeleteTag :exec
-DELETE FROM tags WHERE Id = $1
+DELETE FROM tags WHERE Id = ?
 `
 
-func (q *Queries) DeleteTag(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteTag, id)
+func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTag, id)
 	return err
 }
 
 const deleteUser = `-- name: DeleteUser :exec
-DELETE FROM users WHERE Id = $1
+DELETE FROM users WHERE Id = ?
 `
 
-func (q *Queries) DeleteUser(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteUser, id)
+func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
 }
 
-const getPostById = `-- name: GetPostById :one
-SELECT id, title, body, creatorid, createdat, approvedby FROM posts WHERE Id = $1
+const getLogEntryById = `-- name: GetLogEntryById :one
+SELECT id, tablename, user, oldvalue, newvalue, createdat FROM log_entries WHERE Id = ?
 `
 
-func (q *Queries) GetPostById(ctx context.Context, id int32) (Post, error) {
-	row := q.db.QueryRow(ctx, getPostById, id)
+func (q *Queries) GetLogEntryById(ctx context.Context, id int64) (LogEntry, error) {
+	row := q.db.QueryRowContext(ctx, getLogEntryById, id)
+	var i LogEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Tablename,
+		&i.User,
+		&i.Oldvalue,
+		&i.Newvalue,
+		&i.Createdat,
+	)
+	return i, err
+}
+
+const getPostById = `-- name: GetPostById :one
+SELECT id, title, body, creatorid, createdat, approvedby, approvedat FROM posts WHERE Id = ?
+`
+
+func (q *Queries) GetPostById(ctx context.Context, id int64) (Post, error) {
+	row := q.db.QueryRowContext(ctx, getPostById, id)
 	var i Post
 	err := row.Scan(
 		&i.ID,
@@ -103,16 +206,44 @@ func (q *Queries) GetPostById(ctx context.Context, id int32) (Post, error) {
 		&i.Creatorid,
 		&i.Createdat,
 		&i.Approvedby,
+		&i.Approvedat,
 	)
 	return i, err
 }
 
+const getTagById = `-- name: GetTagById :many
+SELECT id, createdat, tag FROM tags WHERE Id = ?
+`
+
+func (q *Queries) GetTagById(ctx context.Context, id int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, getTagById, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(&i.ID, &i.Createdat, &i.Tag); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, name, email, createdat, isadmin FROM users WHERE Email = $1
+SELECT id, name, email, createdat, isadmin FROM users WHERE Email = ?
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -125,11 +256,11 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const getUserById = `-- name: GetUserById :one
-SELECT id, name, email, createdat, isadmin FROM users WHERE Id = $1
+SELECT id, name, email, createdat, isadmin FROM users WHERE Id = ?
 `
 
-func (q *Queries) GetUserById(ctx context.Context, id int32) (User, error) {
-	row := q.db.QueryRow(ctx, getUserById, id)
+func (q *Queries) GetUserById(ctx context.Context, id int64) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserById, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -142,7 +273,7 @@ func (q *Queries) GetUserById(ctx context.Context, id int32) (User, error) {
 }
 
 const insertUser = `-- name: InsertUser :one
-INSERT INTO users (Name, Email) VALUES ($1, $2) RETURNING id, name, email, createdat, isadmin
+INSERT INTO users (Name, Email) VALUES (?, ?) RETURNING id, name, email, createdat, isadmin
 `
 
 type InsertUserParams struct {
@@ -151,7 +282,7 @@ type InsertUserParams struct {
 }
 
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, insertUser, arg.Name, arg.Email)
+	row := q.db.QueryRowContext(ctx, insertUser, arg.Name, arg.Email)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -164,11 +295,11 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (User, e
 }
 
 const listApprovedPosts = `-- name: ListApprovedPosts :many
-SELECT id, title, body, creatorid, createdat, approvedby FROM posts WHERE ApprovedBy IS NOT NULL
+SELECT id, title, body, creatorid, createdat, approvedby, approvedat FROM posts WHERE ApprovedBy IS NOT NULL
 `
 
 func (q *Queries) ListApprovedPosts(ctx context.Context) ([]Post, error) {
-	rows, err := q.db.Query(ctx, listApprovedPosts)
+	rows, err := q.db.QueryContext(ctx, listApprovedPosts)
 	if err != nil {
 		return nil, err
 	}
@@ -183,10 +314,224 @@ func (q *Queries) ListApprovedPosts(ctx context.Context) ([]Post, error) {
 			&i.Creatorid,
 			&i.Createdat,
 			&i.Approvedby,
+			&i.Approvedat,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listFavouritePostsForUser = `-- name: ListFavouritePostsForUser :many
+SELECT posts.id, posts.title, posts.body, posts.creatorid, posts.createdat, posts.approvedby, posts.approvedat from posts INNER JOIN favourite_posts ON posts.Id = favourite_posts.PostId
+`
+
+func (q *Queries) ListFavouritePostsForUser(ctx context.Context) ([]Post, error) {
+	rows, err := q.db.QueryContext(ctx, listFavouritePostsForUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Post
+	for rows.Next() {
+		var i Post
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Body,
+			&i.Creatorid,
+			&i.Createdat,
+			&i.Approvedby,
+			&i.Approvedat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogEntries = `-- name: ListLogEntries :many
+
+SELECT id, tablename, user, oldvalue, newvalue, createdat FROM log_entries
+`
+
+// LOG_ENTRIES --
+func (q *Queries) ListLogEntries(ctx context.Context) ([]LogEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listLogEntries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogEntry
+	for rows.Next() {
+		var i LogEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tablename,
+			&i.User,
+			&i.Oldvalue,
+			&i.Newvalue,
+			&i.Createdat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogEntriesByTable = `-- name: ListLogEntriesByTable :many
+SELECT id, tablename, user, oldvalue, newvalue, createdat FROM log_entries WHERE TableName = ?
+`
+
+func (q *Queries) ListLogEntriesByTable(ctx context.Context, tablename string) ([]LogEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listLogEntriesByTable, tablename)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogEntry
+	for rows.Next() {
+		var i LogEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tablename,
+			&i.User,
+			&i.Oldvalue,
+			&i.Newvalue,
+			&i.Createdat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogEntriesByUser = `-- name: ListLogEntriesByUser :many
+SELECT id, tablename, user, oldvalue, newvalue, createdat FROM log_entries WHERE User = ?
+`
+
+func (q *Queries) ListLogEntriesByUser(ctx context.Context, user int64) ([]LogEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listLogEntriesByUser, user)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogEntry
+	for rows.Next() {
+		var i LogEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tablename,
+			&i.User,
+			&i.Oldvalue,
+			&i.Newvalue,
+			&i.Createdat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLogEntriesByUserAndTable = `-- name: ListLogEntriesByUserAndTable :many
+SELECT id, tablename, user, oldvalue, newvalue, createdat FROM log_entries WHERE User = ? AND TableName = ?
+`
+
+type ListLogEntriesByUserAndTableParams struct {
+	User      int64
+	Tablename string
+}
+
+func (q *Queries) ListLogEntriesByUserAndTable(ctx context.Context, arg ListLogEntriesByUserAndTableParams) ([]LogEntry, error) {
+	rows, err := q.db.QueryContext(ctx, listLogEntriesByUserAndTable, arg.User, arg.Tablename)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogEntry
+	for rows.Next() {
+		var i LogEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Tablename,
+			&i.User,
+			&i.Oldvalue,
+			&i.Newvalue,
+			&i.Createdat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMostFavouritedPosts = `-- name: ListMostFavouritedPosts :many
+SELECT posts.Title, count(fp.PostId) as count from posts INNER JOIN favourite_posts as fp ON posts.Id = fp.PostId GROUP BY fp.PostId ORDER BY count DESC
+`
+
+type ListMostFavouritedPostsRow struct {
+	Title string
+	Count int64
+}
+
+func (q *Queries) ListMostFavouritedPosts(ctx context.Context) ([]ListMostFavouritedPostsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMostFavouritedPosts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMostFavouritedPostsRow
+	for rows.Next() {
+		var i ListMostFavouritedPostsRow
+		if err := rows.Scan(&i.Title, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -195,11 +540,11 @@ func (q *Queries) ListApprovedPosts(ctx context.Context) ([]Post, error) {
 }
 
 const listNotApprovedPosts = `-- name: ListNotApprovedPosts :many
-SELECT id, title, body, creatorid, createdat, approvedby FROM posts WHERE ApprovedBy IS NULL
+SELECT id, title, body, creatorid, createdat, approvedby, approvedat FROM posts WHERE ApprovedBy IS NULL
 `
 
 func (q *Queries) ListNotApprovedPosts(ctx context.Context) ([]Post, error) {
-	rows, err := q.db.Query(ctx, listNotApprovedPosts)
+	rows, err := q.db.QueryContext(ctx, listNotApprovedPosts)
 	if err != nil {
 		return nil, err
 	}
@@ -214,10 +559,14 @@ func (q *Queries) ListNotApprovedPosts(ctx context.Context) ([]Post, error) {
 			&i.Creatorid,
 			&i.Createdat,
 			&i.Approvedby,
+			&i.Approvedat,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -227,12 +576,12 @@ func (q *Queries) ListNotApprovedPosts(ctx context.Context) ([]Post, error) {
 
 const listPosts = `-- name: ListPosts :many
 
-SELECT id, title, body, creatorid, createdat, approvedby FROM posts
+SELECT id, title, body, creatorid, createdat, approvedby, approvedat FROM posts
 `
 
 // POSTS --
 func (q *Queries) ListPosts(ctx context.Context) ([]Post, error) {
-	rows, err := q.db.Query(ctx, listPosts)
+	rows, err := q.db.QueryContext(ctx, listPosts)
 	if err != nil {
 		return nil, err
 	}
@@ -247,10 +596,14 @@ func (q *Queries) ListPosts(ctx context.Context) ([]Post, error) {
 			&i.Creatorid,
 			&i.Createdat,
 			&i.Approvedby,
+			&i.Approvedat,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -259,11 +612,11 @@ func (q *Queries) ListPosts(ctx context.Context) ([]Post, error) {
 }
 
 const listPostsByCreator = `-- name: ListPostsByCreator :many
-SELECT id, title, body, creatorid, createdat, approvedby FROM posts WHERE CreatorId = $1
+SELECT id, title, body, creatorid, createdat, approvedby, approvedat FROM posts WHERE CreatorId = ?
 `
 
-func (q *Queries) ListPostsByCreator(ctx context.Context, creatorid int32) ([]Post, error) {
-	rows, err := q.db.Query(ctx, listPostsByCreator, creatorid)
+func (q *Queries) ListPostsByCreator(ctx context.Context, creatorid int64) ([]Post, error) {
+	rows, err := q.db.QueryContext(ctx, listPostsByCreator, creatorid)
 	if err != nil {
 		return nil, err
 	}
@@ -278,10 +631,14 @@ func (q *Queries) ListPostsByCreator(ctx context.Context, creatorid int32) ([]Po
 			&i.Creatorid,
 			&i.Createdat,
 			&i.Approvedby,
+			&i.Approvedat,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -290,11 +647,11 @@ func (q *Queries) ListPostsByCreator(ctx context.Context, creatorid int32) ([]Po
 }
 
 const listPostsByTag = `-- name: ListPostsByTag :many
-SELECT posts.id, posts.title, posts.body, posts.creatorid, posts.createdat, posts.approvedby FROM posts INNER JOIN tags ON posts.Id = tags.PostId WHERE tags.Id = $1
+SELECT posts.id, posts.title, posts.body, posts.creatorid, posts.createdat, posts.approvedby, posts.approvedat FROM posts INNER JOIN post_tags ON posts.Id = post_tags.PostId WHERE post_tags.TagId = ?
 `
 
-func (q *Queries) ListPostsByTag(ctx context.Context, id int32) ([]Post, error) {
-	rows, err := q.db.Query(ctx, listPostsByTag, id)
+func (q *Queries) ListPostsByTag(ctx context.Context, tagid int64) ([]Post, error) {
+	rows, err := q.db.QueryContext(ctx, listPostsByTag, tagid)
 	if err != nil {
 		return nil, err
 	}
@@ -309,10 +666,14 @@ func (q *Queries) ListPostsByTag(ctx context.Context, id int32) ([]Post, error) 
 			&i.Creatorid,
 			&i.Createdat,
 			&i.Approvedby,
+			&i.Approvedat,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -322,12 +683,12 @@ func (q *Queries) ListPostsByTag(ctx context.Context, id int32) ([]Post, error) 
 
 const listTags = `-- name: ListTags :many
 
-SELECT id, postid, createdat, tag FROM tags
+SELECT id, createdat, tag FROM tags
 `
 
 // TAGS --
 func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
-	rows, err := q.db.Query(ctx, listTags)
+	rows, err := q.db.QueryContext(ctx, listTags)
 	if err != nil {
 		return nil, err
 	}
@@ -335,15 +696,13 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 	var items []Tag
 	for rows.Next() {
 		var i Tag
-		if err := rows.Scan(
-			&i.ID,
-			&i.Postid,
-			&i.Createdat,
-			&i.Tag,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Createdat, &i.Tag); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -352,11 +711,11 @@ func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
 }
 
 const listTagsByPost = `-- name: ListTagsByPost :many
-SELECT id, postid, createdat, tag FROM tags WHERE Id = $1
+SELECT tags.id, tags.createdat, tags.tag FROM tags INNER JOIN post_tags ON tags.Id = post_tags.TagId WHERE post_tags.PostId = ?
 `
 
-func (q *Queries) ListTagsByPost(ctx context.Context, id int32) ([]Tag, error) {
-	rows, err := q.db.Query(ctx, listTagsByPost, id)
+func (q *Queries) ListTagsByPost(ctx context.Context, postid int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsByPost, postid)
 	if err != nil {
 		return nil, err
 	}
@@ -364,15 +723,13 @@ func (q *Queries) ListTagsByPost(ctx context.Context, id int32) ([]Tag, error) {
 	var items []Tag
 	for rows.Next() {
 		var i Tag
-		if err := rows.Scan(
-			&i.ID,
-			&i.Postid,
-			&i.Createdat,
-			&i.Tag,
-		); err != nil {
+		if err := rows.Scan(&i.ID, &i.Createdat, &i.Tag); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -387,7 +744,7 @@ SELECT id, name, email, createdat, isadmin FROM users
 
 // USERS --
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.Query(ctx, listUsers)
+	rows, err := q.db.QueryContext(ctx, listUsers)
 	if err != nil {
 		return nil, err
 	}
@@ -406,8 +763,102 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeApprovalFromPost = `-- name: RemoveApprovalFromPost :one
+UPDATE posts SET ApprovedBy=NULL, ApprovedAt=NULL WHERE Id = ? RETURNING id, title, body, creatorid, createdat, approvedby, approvedat
+`
+
+func (q *Queries) RemoveApprovalFromPost(ctx context.Context, id int64) (Post, error) {
+	row := q.db.QueryRowContext(ctx, removeApprovalFromPost, id)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Body,
+		&i.Creatorid,
+		&i.Createdat,
+		&i.Approvedby,
+		&i.Approvedat,
+	)
+	return i, err
+}
+
+const removeFavourite = `-- name: RemoveFavourite :exec
+DELETE FROM favourite_posts WHERE PostId = ? AND UserId = ?
+`
+
+type RemoveFavouriteParams struct {
+	Postid int64
+	Userid int64
+}
+
+func (q *Queries) RemoveFavourite(ctx context.Context, arg RemoveFavouriteParams) error {
+	_, err := q.db.ExecContext(ctx, removeFavourite, arg.Postid, arg.Userid)
+	return err
+}
+
+const updatePost = `-- name: UpdatePost :one
+UPDATE posts SET Title=?, Body=? WHERE Id=? RETURNING id, title, body, creatorid, createdat, approvedby, approvedat
+`
+
+type UpdatePostParams struct {
+	Title string
+	Body  string
+	ID    int64
+}
+
+func (q *Queries) UpdatePost(ctx context.Context, arg UpdatePostParams) (Post, error) {
+	row := q.db.QueryRowContext(ctx, updatePost, arg.Title, arg.Body, arg.ID)
+	var i Post
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Body,
+		&i.Creatorid,
+		&i.Createdat,
+		&i.Approvedby,
+		&i.Approvedat,
+	)
+	return i, err
+}
+
+const updateTag = `-- name: UpdateTag :one
+UPDATE tags SET Tag=? RETURNING id, createdat, tag
+`
+
+func (q *Queries) UpdateTag(ctx context.Context, tag string) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, updateTag, tag)
+	var i Tag
+	err := row.Scan(&i.ID, &i.Createdat, &i.Tag)
+	return i, err
+}
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE users SET Name=?, Email=? RETURNING id, name, email, createdat, isadmin
+`
+
+type UpdateUserParams struct {
+	Name  string
+	Email string
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUser, arg.Name, arg.Email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Createdat,
+		&i.Isadmin,
+	)
+	return i, err
 }
