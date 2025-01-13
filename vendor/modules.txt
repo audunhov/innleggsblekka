@@ -1,3 +1,8 @@
+# github.com/a-h/templ v0.3.819
+## explicit; go 1.23
+github.com/a-h/templ
+github.com/a-h/templ/runtime
+github.com/a-h/templ/safehtml
 # github.com/mattn/go-sqlite3 v1.14.24
 ## explicit; go 1.19
 github.com/mattn/go-sqlite3
