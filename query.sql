@@ -55,7 +55,10 @@ UPDATE posts SET ApprovedBy=NULL, ApprovedAt=NULL WHERE Id = ? RETURNING *;
 -- name: ListTags :many
 SELECT * FROM tags;
 
--- name: GetTagById :many
+-- name: ListTagsWithPostCount :many
+SELECT sqlc.embed(tags), count(post_tags.PostId) FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id;
+
+-- name: GetTagById :one
 SELECT * FROM tags WHERE Id = ?;
 
 -- name: ListPostsByTag :many

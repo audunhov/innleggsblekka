@@ -1,5 +1,10 @@
 package views
 
+import (
+	"fmt"
+	"github.com/audunhov/innleggsblekka/internal"
+)
+
 templ Page(title string) {
 	<html lang="en" class="bg-gray-100 min-h-screen">
 		<head>
@@ -8,7 +13,6 @@ templ Page(title string) {
 			<title>{ title }</title>
 			<script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
 			<script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
-			<script src="https://cdn.tailwindcss.com"></script>
 		</head>
 		<body>
 			{ children... }
@@ -16,10 +20,73 @@ templ Page(title string) {
 	</html>
 }
 
-templ HomePage() {
+templ HomePage(tagsWithCount []internal.ListTagsWithPostCountRow, tags []internal.Tag) {
 	@Page("Innleggsblekka") {
 		@Header()
+		@Tags(tagsWithCount)
+		@AddPost(tags)
 	}
+}
+
+templ TagPage(tag internal.Tag, posts []internal.Post) {
+	@Page(tag.Tag) {
+		<h1>{ tag.Tag }</h1>
+		<ul>
+			for _, post := range(posts) {
+				<li>
+					<a href={ templ.URL(fmt.Sprintf("/posts/%d/", post.ID)) }>
+						{ post.Title }
+						<span>
+							if post.Approvedby.Valid {
+								Godkjent
+							} else {
+								Ikke godkjent
+							}
+						</span>
+					</a>
+				</li>
+			}
+		</ul>
+	}
+}
+
+templ PostPage(post internal.Post) {
+	<h1>{ post.Title }</h1>
+	<p>{ post.Body }</p>
+	<p>{ fmt.Sprintf("Skrevet av %d, publisert %s",post.Creatorid, post.Createdat.Time) }</p>
+}
+
+templ AddPostTagOption(tag internal.Tag) {
+	<option id={ fmt.Sprintf("add-post-tag-%d", tag.ID) } value={ fmt.Sprint(tag.ID) }>{ tag.Tag }</option>
+}
+
+templ AddPost(tags []internal.Tag) {
+	<form hx-post="/v1/posts/">
+		<label for="title">Tittel</label>
+		<input id="title" name="title" type="" required/>
+		<label for="body">Innhold</label>
+		<input id="body" name="body" type="text" required/>
+		<fieldset>
+			<select name="tags" id="tags" multiple>
+				for _, tag := range(tags) {
+					@AddPostTagOption(tag)
+				}
+			</select>
+		</fieldset>
+		<button>Send inn</button>
+	</form>
+	<form hx-post="/v1/tags/" hx-target="#tags" hx-swap="beforeend">
+		<input name="name" type="text"/>
+		<button type="submit">Ny kategori</button>
+	</form>
+}
+
+templ Tags(tagsWithCounts []internal.ListTagsWithPostCountRow) {
+	<ul>
+		for i, tag := range(tagsWithCounts) {
+			<li><a href={ templ.URL(fmt.Sprintf("/tag/%d/", tag.Tag.ID)) }>{ fmt.Sprint(i + 1) } - { tag.Tag.Tag } ({ fmt.Sprint(tag.Count) } innlegg)</a></li>
+		}
+	</ul>
 }
 
 templ LoginPage() {
@@ -33,5 +100,5 @@ templ LoginPage() {
 }
 
 templ Header() {
-	<header></header>
+	<header>Heisann</header>
 }

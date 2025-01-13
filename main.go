@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/audunhov/innleggsblekka/internal"
+	"github.com/audunhov/innleggsblekka/views"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -117,7 +118,7 @@ func getUidFromReq(r *http.Request) (int64, error) {
 }
 
 func main() {
-	port := flag.String("port", ":8080", "port to serve")
+	port := flag.String("port", ":5050", "port to serve")
 	file := flag.String("file", "./innlegg.db", "db file path")
 	flag.Parse()
 
@@ -141,7 +142,40 @@ func main() {
 	v1 := http.NewServeMux()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Her vil det komme dokumentasjon og kanskje en web app"))
+		twpc, err := api.ListTagsWithPostCount(r.Context())
+		expect("Can get tags and counts", err)
+
+		tags, err := api.ListTags(r.Context())
+		expect("Can get tags and counts", err)
+
+		expect("Can get tags and counts", err)
+		views.HomePage(twpc, tags).Render(r.Context(), w)
+	})
+
+	mux.HandleFunc("/tag/{id}/", func(w http.ResponseWriter, r *http.Request) {
+
+		tid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		expect("Can convert param", err)
+
+		tag, err := api.GetTagById(r.Context(), tid)
+		expect("Tag found", err)
+
+		posts, err := api.ListPostsByTag(r.Context(), tid)
+		expect("Posts found", err)
+
+		views.TagPage(tag, posts).Render(r.Context(), w)
+
+	})
+
+	mux.HandleFunc("GET /posts/{id}/", func(w http.ResponseWriter, r *http.Request) {
+
+		pid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		expect("Can convert param", err)
+
+		post, err := api.GetPostById(r.Context(), pid)
+		expect("Can convert post", err)
+
+		views.PostPage(post).Render(r.Context(), w)
 	})
 
 	v1.HandleFunc("GET /users/", func(w http.ResponseWriter, r *http.Request) {
@@ -163,6 +197,11 @@ func main() {
 		posts, err := api.ListPosts(r.Context())
 		expect("Can find posts", err)
 		respondWithJson(w, http.StatusOK, posts)
+	})
+	v1.HandleFunc("POST /posts/", func(w http.ResponseWriter, r *http.Request) {
+		err := r.ParseForm()
+		expect("Can parse form", err)
+		respondWithJson(w, http.StatusOK, r.Form)
 	})
 	v1.HandleFunc("GET /posts/{id}/favourite/", func(w http.ResponseWriter, r *http.Request) {
 		pid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -202,6 +241,11 @@ func main() {
 		tags, err := api.ListTags(r.Context())
 		expect("Can find tags", err)
 		respondWithJson(w, http.StatusOK, tags)
+	})
+	v1.HandleFunc("POST /tags/", func(w http.ResponseWriter, r *http.Request) {
+		tag, err := api.CreateTag(r.Context(), r.FormValue("name"))
+		expect("Can find tags", err)
+		views.AddPostTagOption(tag).Render(r.Context(), w)
 	})
 
 	mux.Handle("/v1/", http.StripPrefix("/v1", v1))

@@ -211,31 +211,15 @@ func (q *Queries) GetPostById(ctx context.Context, id int64) (Post, error) {
 	return i, err
 }
 
-const getTagById = `-- name: GetTagById :many
+const getTagById = `-- name: GetTagById :one
 SELECT id, createdat, tag FROM tags WHERE Id = ?
 `
 
-func (q *Queries) GetTagById(ctx context.Context, id int64) ([]Tag, error) {
-	rows, err := q.db.QueryContext(ctx, getTagById, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Tag
-	for rows.Next() {
-		var i Tag
-		if err := rows.Scan(&i.ID, &i.Createdat, &i.Tag); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetTagById(ctx context.Context, id int64) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagById, id)
+	var i Tag
+	err := row.Scan(&i.ID, &i.Createdat, &i.Tag)
+	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
@@ -724,6 +708,43 @@ func (q *Queries) ListTagsByPost(ctx context.Context, postid int64) ([]Tag, erro
 	for rows.Next() {
 		var i Tag
 		if err := rows.Scan(&i.ID, &i.Createdat, &i.Tag); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagsWithPostCount = `-- name: ListTagsWithPostCount :many
+SELECT tags.id, tags.createdat, tags.tag, count(post_tags.PostId) FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id
+`
+
+type ListTagsWithPostCountRow struct {
+	Tag   Tag
+	Count int64
+}
+
+func (q *Queries) ListTagsWithPostCount(ctx context.Context) ([]ListTagsWithPostCountRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsWithPostCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTagsWithPostCountRow
+	for rows.Next() {
+		var i ListTagsWithPostCountRow
+		if err := rows.Scan(
+			&i.Tag.ID,
+			&i.Tag.Createdat,
+			&i.Tag.Tag,
+			&i.Count,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
