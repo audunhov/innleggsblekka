@@ -16,6 +16,12 @@ Id INTEGER PRIMARY KEY,
 	ApprovedAt TIMESTAMP
 );
 
+CREATE VIRTUAL TABLE posts_fts USING fts5 (Id, Title, Body);
+CREATE TRIGGER insert_posts_fts AFTER INSERT ON posts BEGIN INSERT INTO posts_fts(Id, Title, Body) VALUES (New.Id, New.Title, New.Body); end;
+CREATE TRIGGER update_posts_fts AFTER UPDATE ON posts BEGIN UPDATE posts_fts SET Tile = New.Title, Body = New.Body WHERE Id=New.Id; end;
+CREATE TRIGGER delete_posts_fts AFTER DELETE ON posts BEGIN DELETE FROM posts_fts WHERE Id=Old.Id; end;
+
+
 CREATE TABLE tags (
 	Id INTEGER PRIMARY KEY,
 	CreatedAt TIMESTAMP DEFAULT current_timestamp,

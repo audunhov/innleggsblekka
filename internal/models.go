@@ -39,6 +39,13 @@ type PostTag struct {
 	Createdat sql.NullTime
 }
 
+type PostsFt struct {
+	ID       string
+	Title    string
+	Body     string
+	PostsFts string
+}
+
 type Tag struct {
 	ID        int64
 	Createdat sql.NullTime

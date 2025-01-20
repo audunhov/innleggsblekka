@@ -3,6 +3,10 @@
 </body></html>
  
  
+ 
+<h3>Search Contacts</h3><input class=\"form-control\" type=\"search\" name=\"search\" placeholder=\"Begin Typing To Search Users...\" hx-post=\"/v1/search/\" hx-trigger=\"input changed delay:500ms, keyup[key==&#39;Enter&#39;]\" hx-target=\"#search-results\"><ul id=\"search-results\"></ul>
+<h3>
+</h3>
 <h1>
 </h1><ul>
 <li><a href=\"

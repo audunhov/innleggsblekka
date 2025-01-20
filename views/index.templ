@@ -23,9 +23,31 @@ templ Page(title string) {
 templ HomePage(tagsWithCount []internal.ListTagsWithPostCountRow, tags []internal.Tag) {
 	@Page("Innleggsblekka") {
 		@Header()
+		@Search()
 		@Tags(tagsWithCount)
 		@AddPost(tags)
 	}
+}
+
+templ Search() {
+	<h3>
+		Search Contacts
+	</h3>
+	<input
+		class="form-control"
+		type="search"
+		name="search"
+		placeholder="Begin Typing To Search Users..."
+		hx-post="/v1/search/"
+		hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
+		hx-target="#search-results"
+	/>
+	<ul id="search-results"></ul>
+}
+
+templ SearchResult(postId, title, match string) {
+	<h3>{ title }</h3>
+	@templ.Raw(match)
 }
 
 templ TagPage(tag internal.Tag, posts []internal.Post) {

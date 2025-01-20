@@ -23,6 +23,9 @@ DELETE FROM users WHERE Id = ?;
 -- name: ListPosts :many
 SELECT * FROM posts;
 
+-- name: SearchPosts :many
+SELECT *, highlight(posts_fts, 2, '<b>', '</b>') as highlight FROM posts_fts WHERE posts_fts MATCH ? ORDER BY rank;
+
 -- name: GetPostById :one
 SELECT * FROM posts WHERE Id = ?;
 
@@ -56,7 +59,7 @@ UPDATE posts SET ApprovedBy=NULL, ApprovedAt=NULL WHERE Id = ? RETURNING *;
 SELECT * FROM tags;
 
 -- name: ListTagsWithPostCount :many
-SELECT sqlc.embed(tags), count(post_tags.PostId) FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id;
+SELECT sqlc.embed(tags), count(post_tags.PostId) as count FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id ORDER BY count DESC;
 
 -- name: GetTagById :one
 SELECT * FROM tags WHERE Id = ?;

@@ -722,7 +722,7 @@ func (q *Queries) ListTagsByPost(ctx context.Context, postid int64) ([]Tag, erro
 }
 
 const listTagsWithPostCount = `-- name: ListTagsWithPostCount :many
-SELECT tags.id, tags.createdat, tags.tag, count(post_tags.PostId) FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id
+SELECT tags.id, tags.createdat, tags.tag, count(post_tags.PostId) as count FROM tags INNER JOIN post_tags on tags.Id = post_tags.TagId GROUP BY tags.Id ORDER BY count DESC
 `
 
 type ListTagsWithPostCountRow struct {
@@ -824,6 +824,47 @@ type RemoveFavouriteParams struct {
 func (q *Queries) RemoveFavourite(ctx context.Context, arg RemoveFavouriteParams) error {
 	_, err := q.db.ExecContext(ctx, removeFavourite, arg.Postid, arg.Userid)
 	return err
+}
+
+const searchPosts = `-- name: SearchPosts :many
+SELECT id, title, body, posts_fts, highlight(posts_fts, 2, '<b>', '</b>') as highlight FROM posts_fts WHERE posts_fts MATCH ? ORDER BY rank
+`
+
+type SearchPostsRow struct {
+	ID        string
+	Title     string
+	Body      string
+	PostsFts  string
+	Highlight string
+}
+
+func (q *Queries) SearchPosts(ctx context.Context, postsFts string) ([]SearchPostsRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchPosts, postsFts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPostsRow
+	for rows.Next() {
+		var i SearchPostsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Body,
+			&i.PostsFts,
+			&i.Highlight,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updatePost = `-- name: UpdatePost :one

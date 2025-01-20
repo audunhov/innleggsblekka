@@ -144,6 +144,7 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		twpc, err := api.ListTagsWithPostCount(r.Context())
 		expect("Can get tags and counts", err)
+		fmt.Println(twpc)
 
 		tags, err := api.ListTags(r.Context())
 		expect("Can get tags and counts", err)
@@ -184,6 +185,20 @@ func main() {
 		respondWithJson(w, http.StatusOK, users)
 	})
 
+	v1.HandleFunc("POST /search/", func(w http.ResponseWriter, r *http.Request) {
+		if searchval := r.FormValue("search"); searchval != "" {
+			posts, err := api.SearchPosts(r.Context(), r.FormValue("search"))
+			expect("Can search post", err)
+
+			for _, post := range posts {
+				views.SearchResult(post.ID, post.Title, post.Highlight).Render(r.Context(), w)
+			}
+			return
+		}
+		respondWithJson(w, 200, "Ingen innlegg")
+
+	})
+
 	v1.HandleFunc("GET /users/{id}/", func(w http.ResponseWriter, r *http.Request) {
 		uid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		expect("Can get id", err)
@@ -199,9 +214,38 @@ func main() {
 		respondWithJson(w, http.StatusOK, posts)
 	})
 	v1.HandleFunc("POST /posts/", func(w http.ResponseWriter, r *http.Request) {
+		q, tx := api.Begin(r)
+		defer api.Close(r, tx)
+		defer tx.Commit()
 		err := r.ParseForm()
 		expect("Can parse form", err)
-		respondWithJson(w, http.StatusOK, r.Form)
+
+		title := r.FormValue("title")
+		body := r.FormValue("body")
+		tags := r.Form["tags"]
+
+		post, err := q.CreatePost(r.Context(), internal.CreatePostParams{
+			Title:     title,
+			Body:      body,
+			Creatorid: 1,
+		})
+		for _, tag := range tags {
+			tid, err := strconv.ParseInt(tag, 10, 64)
+
+			expect("can convert tid", err)
+
+			tp, err := q.AddTagToPost(r.Context(), internal.AddTagToPostParams{
+				Postid: post.ID,
+				Tagid:  tid,
+			})
+
+			fmt.Println("Added tp", tp)
+
+			expect("Can add tag to post", err)
+
+		}
+
+		respondWithJson(w, http.StatusOK, post)
 	})
 	v1.HandleFunc("GET /posts/{id}/favourite/", func(w http.ResponseWriter, r *http.Request) {
 		pid, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
